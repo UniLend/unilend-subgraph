@@ -1,0 +1,32 @@
+specVersion: 0.0.1
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum/contract
+    name: Core
+    network: ropsten
+    source:
+      address: "0x13A145D215182924c89F2aBc7D358DCc72F8F788"
+      abi: Core
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.2
+      language: wasm/assemblyscript
+      entities:
+        - Deposit
+        - FlashLoan
+        - PoolCreated
+        - RedeemUnderlying
+      abis:
+        - name: Core
+          file: ./abis/Core.json
+      eventHandlers:
+        - event: Deposit(indexed address,indexed address,uint256,uint256)
+          handler: handleDeposit
+        - event: FlashLoan(indexed address,indexed address,uint256,uint256,uint256,uint256)
+          handler: handleFlashLoan
+        - event: PoolCreated(indexed address,address,uint256)
+          handler: handlePoolCreated
+        - event: RedeemUnderlying(indexed address,indexed address,uint256,uint256)
+          handler: handleRedeemUnderlying
+      file: ./src/mapping.ts
