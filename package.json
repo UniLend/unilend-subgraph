@@ -1,10 +1,10 @@
 {
-  "name": "Unilend",
+  "name": "unilend",
   "license": "UNLICENSED",
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/ aeq-thanushpraveen/Unilend",
+    "deploy": "graph deploy --node https://api.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/ aeq-thanushpraveen/unilend",
     "create-local": "graph create --node http://localhost:8020/ aeq-thanushpraveen/Unilend",
     "remove-local": "graph remove --node http://localhost:8020/ aeq-thanushpraveen/Unilend",
     "deploy-local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 aeq-thanushpraveen/Unilend"

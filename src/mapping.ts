@@ -1,71 +1,130 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigDecimal, BigInt, log } from "@graphprotocol/graph-ts";
 import {
   Core,
   Deposit,
   FlashLoan,
   PoolCreated,
-  RedeemUnderlying
-} from "../generated/Core/Core"
-import { ExampleEntity } from "../generated/schema"
+  RedeemUnderlying,
+} from "../generated/Core/Core";
+import { IERC20 } from "../generated/Core/IERC20";
+import { UnilendFDonation } from "../generated/Core/UnilendFDonation";
+import {
+  FlashLoanEntity,
+  DepositEntity,
+  Token,
+  RedeemUnderlyingEntity,
+} from "../generated/schema";
+import {
+  convertTokenToDecimal,
+  DAY_BI,
+  fetchTokenDecimals,
+  fetchTokenName,
+  fetchTokenSymbol,
+  fetchTokenTotalSupply,
+  SIXTY_BI,
+  YEAR_BI,
+  ZERO_BD,
+  ZERO_BI,
+} from "./helpers";
 
 export function handleDeposit(event: Deposit): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
+  let deposit = DepositEntity.load(event.transaction.hash.toHexString());
+  let token0 = Token.load(event.params._reserve.toHexString());
+  let depositContract = Core.bind(event.address);
+  let IERC20Contract = IERC20.bind(event.params._reserve);
 
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (entity == null) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
-
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+  let donateAddress = depositContract.donationAddress();
+  if (token0 === null) {
+    token0 = new Token(event.params._reserve.toHexString());
+    token0.symbol = fetchTokenSymbol(event.params._reserve);
+    token0.name = fetchTokenName(event.params._reserve);
+    token0.totalSupply = fetchTokenTotalSupply(event.params._reserve);
+    let decimals = fetchTokenDecimals(event.params._reserve);
+    // bail if we couldn't figure out the decimals
+    if (decimals === null) {
+      log.debug("mybug the decimal on token 0 was null", []);
+      return;
+    }
+    // let tokenContract;
+    token0.decimals = decimals;
+    token0.derivedETH = ZERO_BD;
+    token0.tradeVolume = ZERO_BD;
+    token0.tradeVolumeUSD = ZERO_BD;
+    token0.untrackedVolumeUSD = ZERO_BD;
+    token0.totalLiquidity = ZERO_BD;
+    token0.releaseRate = ZERO_BD;
+    token0.totalRewardPool = ZERO_BD;
+    token0.apy = ZERO_BD;
+    token0.totalFlashLoan = ZERO_BD;
+    token0.txCount = ZERO_BI;
   }
+  if (deposit === null) {
+    deposit = new DepositEntity(event.transaction.hash.toHexString());
+    deposit.reserve = event.params._reserve.toHexString();
+    deposit.amount = event.params._amount.toBigDecimal();
+    deposit.user = event.params._user.toHexString();
+    deposit.timestamp = event.params._timestamp;
 
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
+    let liquidity = ZERO_BI.plus(
+      depositContract.balanceOfUnderlying(
+        event.params._reserve,
+        event.params._user,
+        event.params._timestamp
+      )
+    );
+    token0.totalLiquidity = convertTokenToDecimal(liquidity, token0.decimals);
+  }
+  let contract = UnilendFDonation.bind(donateAddress);
+  let releaseRate = contract.getReleaseRate(event.params._reserve);
+  let deciReleaseRate = convertTokenToDecimal(releaseRate, token0.decimals);
+  let day = SIXTY_BI.times(SIXTY_BI).times(DAY_BI);
+  token0.releaseRate = token0.releaseRate.plus(deciReleaseRate.times(day));
+  let rewardPoolTotal = IERC20Contract.balanceOf(donateAddress);
+  token0.totalRewardPool = convertTokenToDecimal(
+    rewardPoolTotal,
+    token0.decimals
+  );
+  let totalDepositedToken = IERC20Contract.balanceOf(event.address);
 
-  // Entity fields can be set based on event parameters
-  entity._reserve = event.params._reserve
-  entity._user = event.params._user
+  let year = SIXTY_BI.times(SIXTY_BI)
+    .times(DAY_BI)
+    .times(YEAR_BI);
+  token0.apy = convertTokenToDecimal(releaseRate, token0.decimals)
+    .times(year)
+    .times(
+      convertTokenToDecimal(rewardPoolTotal, token0.decimals).div(
+        convertTokenToDecimal(totalDepositedToken, token0.decimals)
+      )
+    );
 
-  // Entities can be written to the store with `.save()`
-  entity.save()
-
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
-
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.Assets(...)
-  // - contract.Pools(...)
-  // - contract.admin(...)
-  // - contract.balanceOfUnderlying(...)
-  // - contract.createDonationContract(...)
-  // - contract.createPool(...)
-  // - contract.distributorAddress(...)
-  // - contract.donationAddress(...)
-  // - contract.getFlashLoanFeesInBips(...)
-  // - contract.getPools(...)
-  // - contract.poolBalanceOfUnderlying(...)
-  // - contract.poolLength(...)
-  // - contract.redeem(...)
-  // - contract.redeemUnderlying(...)
-  // - contract.setFlashLoanFeesInBips(...)
+  deposit.save();
+  token0.save();
 }
 
-export function handleFlashLoan(event: FlashLoan): void {}
+export function handleFlashLoan(event: FlashLoan): void {
+  let flashLoan = FlashLoanEntity.load(event.transaction.hash.toHexString());
+  if (flashLoan === null) {
+    flashLoan = new FlashLoanEntity(event.transaction.hash.toHexString());
+
+    flashLoan.amount = event.params._amount.toBigDecimal();
+    flashLoan.reserve = event.params._reserve.toHexString();
+    flashLoan.target = event.params._target.toHexString();
+    flashLoan.totalFee = event.params._totalFee;
+    flashLoan.timestamp = event.params._timestamp;
+  }
+  flashLoan.save();
+}
 
 export function handlePoolCreated(event: PoolCreated): void {}
 
-export function handleRedeemUnderlying(event: RedeemUnderlying): void {}
+export function handleRedeemUnderlying(event: RedeemUnderlying): void {
+  let redeemUnderlying = RedeemUnderlyingEntity.load(
+    event.transaction.hash.toHexString()
+  );
+  if (redeemUnderlying === null) {
+    redeemUnderlying = new RedeemUnderlyingEntity(
+      event.transaction.hash.toHexString()
+    );
+  }
+  redeemUnderlying.save();
+}

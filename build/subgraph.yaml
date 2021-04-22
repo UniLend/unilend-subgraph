@@ -1,6 +1,6 @@
 specVersion: 0.0.2
 schema:
-  file: ./schema.graphql
+  file: schema.graphql
 dataSources:
   - kind: ethereum/contract
     name: Core
@@ -20,17 +20,17 @@ dataSources:
         - RedeemUnderlying
       abis:
         - name: Core
-          file: ./abis/Core.json
+          file: Core/abis/Core.json
         - name: ERC20
-          file: ./abis/ERC20.json
+          file: Core/abis/ERC20.json
         - name: ERC20SymbolBytes
-          file: ./abis/ERC20SymbolBytes.json
+          file: Core/abis/ERC20SymbolBytes.json
         - name: ERC20NameBytes
-          file: ./abis/ERC20NameBytes.json
+          file: Core/abis/ERC20NameBytes.json
         - name: IERC20
-          file: ./abis/IERC20.json
+          file: Core/abis/IERC20.json
         - name: UnilendFDonation
-          file: ./abis/UnilendFDonation.json
+          file: Core/abis/UnilendFDonation.json
       eventHandlers:
         - event: Deposit(indexed address,indexed address,uint256,uint256)
           handler: handleDeposit
@@ -40,4 +40,4 @@ dataSources:
           handler: handlePoolCreated
         - event: RedeemUnderlying(indexed address,indexed address,uint256,uint256)
           handler: handleRedeemUnderlying
-      file: ./src/mapping.ts
+      file: Core/Core.wasm
